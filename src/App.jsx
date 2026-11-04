@@ -144,14 +144,14 @@ export default function App() {
     }
   };
 
-  const handleAddEvent = async (e) => {
+const handleAddEvent = async (e) => {
     e.preventDefault();
     if (!formData.title) return;
     
     const roomMeta = ROOM_METADATA[formData.room] || { floor: '1st Floor' };
     const newId = `evt-${Date.now()}`;
 
-    const { error } = await supabase.from('events').insert([
+    const { data, error } = await supabase.from('events').insert([
       {
         id: newId,
         title: formData.title,
@@ -165,8 +165,8 @@ export default function App() {
     ]);
 
     if (error) {
-      console.error('Error inserting event:', error);
-      alert('Failed to add event to Supabase');
+      console.error('Supabase Error Details:', error);
+      alert(`Failed to add event: ${error.message} (${error.details || error.code})`);
       return;
     }
 
