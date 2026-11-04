@@ -38,12 +38,13 @@ export default function App() {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
+  // Form state initialized with unselected meeting room, start time, and end time
   const [formData, setFormData] = useState({
     title: '',
-    room: 'Phoenix',
+    room: '',
     targets: ['lgf_lobby', 'gf_lobby', 'floor_movable'],
-    startTime: '09:00',
-    endTime: '17:00',
+    startTime: '',
+    endTime: '',
     headerOverride: ''
   });
 
@@ -131,7 +132,10 @@ export default function App() {
 
   const handleAddEvent = async (e) => {
     e.preventDefault();
-    if (!formData.title) return;
+    if (!formData.title || !formData.room || !formData.startTime || !formData.endTime) {
+      alert('Please select a meeting room, start time, and end time.');
+      return;
+    }
     
     const roomMeta = ROOM_METADATA[formData.room] || { floor: '1st Floor' };
     const newId = `evt-${Date.now()}`;
@@ -157,10 +161,10 @@ export default function App() {
 
     setFormData({
       title: '',
-      room: 'Phoenix',
+      room: '',
       targets: ['lgf_lobby', 'gf_lobby', 'floor_movable'],
-      startTime: '09:00',
-      endTime: '17:00',
+      startTime: '',
+      endTime: '',
       headerOverride: ''
     });
   };
@@ -309,10 +313,12 @@ export default function App() {
                 <div>
                   <label className="block text-slate-400 mb-1 font-medium">Meeting Room</label>
                   <select
+                    required
                     value={formData.room}
                     onChange={(e) => setFormData({ ...formData, room: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500 text-xs md:text-sm"
                   >
+                    <option value="" disabled>Select a meeting room...</option>
                     {Object.keys(ROOM_METADATA).map(room => (
                       <option key={room} value={room}>{room} ({ROOM_METADATA[room].floor})</option>
                     ))}
@@ -336,6 +342,7 @@ export default function App() {
                   <label className="block text-slate-400 mb-1 font-medium">Start Time</label>
                   <input
                     type="time"
+                    required
                     value={formData.startTime}
                     onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500 text-xs md:text-sm"
@@ -346,6 +353,7 @@ export default function App() {
                   <label className="block text-slate-400 mb-1 font-medium">End Time</label>
                   <input
                     type="time"
+                    required
                     value={formData.endTime}
                     onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500 text-xs md:text-sm"
@@ -425,7 +433,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Signage Player Display View */}
+      {/* Signage Player View */}
       {activeTab === 'player' && (
         <div className="flex-1 bg-[#070B19] relative overflow-hidden flex flex-col w-full h-full p-4 md:p-6">
           <SignageCanvas
@@ -439,7 +447,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Security PIN Modal */}
+      {/* Security PIN Override Modal */}
       {showPinModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl w-full max-w-xs space-y-4 shadow-2xl">
@@ -487,7 +495,6 @@ function SignageCanvas({
 }) {
   const eventCount = activeEvents.length;
 
-  // Header Size Scaling Rules based on event count
   const headerSizeMap = {
     1: 'text-4xl md:text-6xl font-extrabold',
     2: 'text-3xl md:text-5xl font-bold',
@@ -546,7 +553,6 @@ function SignageCanvas({
         className="pointer-events-auto absolute top-0 right-0 w-24 h-24 z-50 cursor-default"
       />
 
-      {/* Dynamic Scaling Header */}
       <div className="text-center space-y-1 shrink-0 pb-2">
         <div className={`flex items-center justify-center space-x-3 text-amber-400/90 uppercase font-sans tracking-widest ${currentSubHeaderClass}`}>
           <span className="h-[1px] w-12 md:w-24 bg-amber-400/40" />
@@ -558,7 +564,6 @@ function SignageCanvas({
         </h1>
       </div>
 
-      {/* Dynamic Scaling Body Canvas */}
       <div className="flex-1 flex items-center justify-center min-h-0 py-2 w-full">
         {selectedScreen === 'floor_movable' ? (
           <FloorAxisLayout movableFloorSetting={movableFloorSetting} events={activeEvents} />
@@ -567,7 +572,6 @@ function SignageCanvas({
         )}
       </div>
 
-      {/* Footer */}
       <div className="text-center shrink-0 border-t border-amber-400/20 pt-2">
         <div className="inline-flex items-center space-x-3 text-xs md:text-base text-slate-300 tracking-widest font-sans">
           <span className="font-serif font-bold text-amber-400 text-sm md:text-lg">voco</span>
