@@ -1,22 +1,23 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import {
-  Monitor,
-  Plus,
-  Trash2,
-  Clock,
-  Lock,
-  MapPin,
-  Sliders,
-  ArrowRight,
-  ArrowLeft,
+import { 
+  Monitor, 
+  Plus, 
+  Trash2, 
+  Clock, 
+  Lock, 
+  MapPin, 
+  Sliders, 
+  ArrowRight, 
+  ArrowLeft, 
   X,
   LogOut,
   Eye,
   EyeOff,
   AlertCircle,
   Calendar,
-  Radio
+  Radio,
+  Maximize2
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -823,8 +824,8 @@ function EventRow({ evt, onDelete }) {
       <div>
         <div className="font-semibold text-slate-200">{evt.title}</div>
         <div className="text-amber-400/90 text-xs">
-          <span className="text-slate-400 font-medium">{evt.eventDate}</span> • in{' '}
-          <span className="font-medium text-slate-300">{evt.room}</span> • ({evt.startTime} - {evt.endTime}
+          <span className="text-slate-400 font-medium">{evt.eventDate}</span> in{' '}
+          <span className="font-medium text-slate-300">{evt.room}</span> ({evt.startTime} - {evt.endTime}
           {crossesMidnight(evt) ? ', next day' : ''})
         </div>
       </div>
@@ -849,6 +850,18 @@ function SignageCanvas({
 }) {
   const eventCount = activeEvents.length;
 
+  const handleFullscreenToggle = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.error("Error attempting to enable fullscreen:", err);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
+
   const headerSizeMap = {
     1: 'text-4xl md:text-6xl font-extrabold',
     2: 'text-3xl md:text-5xl font-bold',
@@ -868,11 +881,21 @@ function SignageCanvas({
 
   if (eventCount === 0) {
     return (
-      <div
+      <div 
         className={`w-full h-full bg-slate-950 relative flex flex-col items-center justify-center p-6 overflow-hidden select-none ${
           isTouchLocked ? 'pointer-events-auto' : ''
         }`}
       >
+        {/* Fullscreen Trigger Button (Top Left) */}
+        <button
+          onClick={handleFullscreenToggle}
+          className="absolute top-4 left-4 z-50 bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-sans flex items-center space-x-1.5 shadow-lg backdrop-blur transition pointer-events-auto"
+          title="Toggle Fullscreen"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+          <span>Go Fullscreen</span>
+        </button>
+
         <div
           onClick={onCornerTap}
           aria-hidden="true"
@@ -898,11 +921,21 @@ function SignageCanvas({
   }
 
   return (
-    <div
+    <div 
       className={`w-full h-full bg-[#070B19] text-white flex flex-col justify-between relative overflow-hidden select-none font-serif ${
         isTouchLocked ? 'pointer-events-none' : ''
       }`}
     >
+      {/* Fullscreen Trigger Button (Top Left) */}
+      <button
+        onClick={handleFullscreenToggle}
+        className="pointer-events-auto absolute top-4 left-4 z-50 bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-sans flex items-center space-x-1.5 shadow-lg backdrop-blur transition"
+        title="Toggle Fullscreen"
+      >
+        <Maximize2 className="w-3.5 h-3.5" />
+        <span>Go Fullscreen</span>
+      </button>
+
       <div
         onClick={onCornerTap}
         aria-hidden="true"
