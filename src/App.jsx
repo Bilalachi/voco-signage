@@ -14,7 +14,8 @@ import {
   LogOut,
   Eye,
   EyeOff,
-  AlertCircle
+  AlertCircle,
+  Calendar
 } from 'lucide-react';
 
 const ROOM_METADATA = {
@@ -26,6 +27,8 @@ const ROOM_METADATA = {
   'Toucan': { floor: '2nd Floor', floorCode: '2nd', side: 'right' },
   'Pavio Theatre': { floor: 'LGF', floorCode: 'LGF', side: 'left' },
 };
+
+const getTodayString = () => new Date().toISOString().split('T')[0];
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -46,6 +49,7 @@ export default function App() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [simulatedTime, setSimulatedTime] = useState('11:00');
+  const [simulatedDate, setSimulatedDate] = useState(getTodayString());
   
   const [isTouchLocked, setIsTouchLocked] = useState(true);
   const [tapCount, setTapCount] = useState(0);
@@ -53,11 +57,12 @@ export default function App() {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
-  // Form state with unselected room, times, and targets
+  // Form state initialized with unselected room, times, targets, and date
   const [formData, setFormData] = useState({
     title: '',
     room: '',
     targets: [],
+    eventDate: '',
     startTime: '',
     endTime: '',
     headerOverride: ''
@@ -138,6 +143,7 @@ export default function App() {
         room: item.room,
         floor: item.floor,
         targets: item.targets || [],
+        eventDate: item.event_date || getTodayString(),
         startTime: item.start_time,
         endTime: item.end_time,
         headerOverride: item.header_override || ''
@@ -150,10 +156,11 @@ export default function App() {
   const activeEventsForScreen = useMemo(() => {
     return events.filter(evt => {
       const isTargeted = evt.targets.includes(selectedScreen);
+      const isMatchingDate = evt.eventDate === simulatedDate;
       const isWithinTime = simulatedTime >= evt.startTime && simulatedTime <= evt.endTime;
-      return isTargeted && isWithinTime;
+      return isTargeted && isMatchingDate && isWithinTime;
     }).slice(0, 4);
-  }, [events, selectedScreen, simulatedTime]);
+  }, [events, selectedScreen, simulatedDate, simulatedTime]);
 
   const handleCornerTap = () => {
     if (!isTouchLocked) return;
@@ -181,8 +188,8 @@ export default function App() {
 
   const handleAddEvent = async (e) => {
     e.preventDefault();
-    if (!formData.title || !formData.room || !formData.startTime || !formData.endTime) {
-      alert('Please select a meeting room, start time, and end time.');
+    if (!formData.title || !formData.room || !formData.startTime || !formData.endTime || !formData.eventDate) {
+      alert('Please fill in all required event details including meeting room, date, start time, and end time.');
       return;
     }
 
@@ -201,6 +208,7 @@ export default function App() {
         room: formData.room,
         floor: roomMeta.floor,
         targets: formData.targets,
+        event_date: formData.eventDate,
         start_time: formData.startTime,
         end_time: formData.endTime,
         header_override: formData.headerOverride
@@ -217,6 +225,7 @@ export default function App() {
       title: '',
       room: '',
       targets: [],
+      eventDate: '',
       startTime: '',
       endTime: '',
       headerOverride: ''
@@ -374,9 +383,19 @@ export default function App() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          {/* Target & Time simulation controls are strictly shown on Player view */}
           {activeTab === 'player' && (
             <>
+              <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
+                <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="text-slate-400 text-[11px]">Date:</span>
+                <input
+                  type="date"
+                  value={simulatedDate}
+                  onChange={(e) => setSimulatedDate(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
+                />
+              </div>
+
               <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
                 <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span className="text-slate-400 text-[11px]">Time:</span>
@@ -485,7 +504,19 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1 font-medium">Event Date</label>
+                  <input
+                    type="date"
+                    required
+                    min={getTodayString()}
+                    value={formData.eventDate}
+                    onChange={(e) => setFormData({ ...formData, eventDate: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500 text-xs md:text-sm"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-slate-400 mb-1 font-medium">Start Time</label>
                   <input
@@ -564,7 +595,7 @@ export default function App() {
                     <div>
                       <div className="font-semibold text-slate-200">{evt.title}</div>
                       <div className="text-amber-400/90 text-xs">
-                        in <span className="font-medium text-slate-300">{evt.room}</span> • ({evt.startTime} - {evt.endTime})
+                        <span className="text-slate-400 font-medium">{evt.eventDate}</span> • in <span className="font-medium text-slate-300">{evt.room}</span> • ({evt.startTime} - {evt.endTime})
                       </div>
                     </div>
                     <button
