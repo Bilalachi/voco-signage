@@ -374,43 +374,48 @@ export default function App() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
-            <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span className="text-slate-400 text-[11px]">Time:</span>
-            <input
-              type="time"
-              value={simulatedTime}
-              onChange={(e) => setSimulatedTime(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
-            />
-          </div>
+          {/* Target & Time simulation controls are strictly shown on Player view */}
+          {activeTab === 'player' && (
+            <>
+              <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
+                <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="text-slate-400 text-[11px]">Time:</span>
+                <input
+                  type="time"
+                  value={simulatedTime}
+                  onChange={(e) => setSimulatedTime(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
+                />
+              </div>
 
-          <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
-            <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span className="text-slate-400 text-[11px]">Target:</span>
-            <select
-              value={selectedScreen}
-              onChange={(e) => setSelectedScreen(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs px-1.5 py-0.5 rounded focus:outline-none"
-            >
-              <option value="gf_lobby">GF Lobby Screen</option>
-              <option value="lgf_lobby">LGF Lobby Screen</option>
-              <option value="floor_movable">Floor Directional Signage</option>
-            </select>
-          </div>
+              <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
+                <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="text-slate-400 text-[11px]">Target:</span>
+                <select
+                  value={selectedScreen}
+                  onChange={(e) => setSelectedScreen(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 text-slate-200 text-xs px-1.5 py-0.5 rounded focus:outline-none"
+                >
+                  <option value="gf_lobby">GF Lobby Screen</option>
+                  <option value="lgf_lobby">LGF Lobby Screen</option>
+                  <option value="floor_movable">Floor Directional Signage</option>
+                </select>
+              </div>
 
-          {selectedScreen === 'floor_movable' && (
-            <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
-              <span className="text-slate-400 text-[11px]">Floor:</span>
-              <select
-                value={movableFloorSetting}
-                onChange={(e) => setMovableFloorSetting(e.target.value)}
-                className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
-              >
-                <option value="1st Floor">1st Floor</option>
-                <option value="2nd Floor">2nd Floor</option>
-              </select>
-            </div>
+              {selectedScreen === 'floor_movable' && (
+                <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
+                  <span className="text-slate-400 text-[11px]">Floor:</span>
+                  <select
+                    value={movableFloorSetting}
+                    onChange={(e) => setMovableFloorSetting(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
+                  >
+                    <option value="1st Floor">1st Floor</option>
+                    <option value="2nd Floor">2nd Floor</option>
+                  </select>
+                </div>
+              )}
+            </>
           )}
 
           <button
