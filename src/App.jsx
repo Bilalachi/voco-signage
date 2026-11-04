@@ -1,22 +1,34 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import { 
-  Monitor, 
-  Plus, 
-  Trash2, 
-  Clock, 
-  Lock, 
-  MapPin, 
-  Sliders, 
-  ArrowRight, 
-  ArrowLeft, 
+import {
+  Monitor,
+  Plus,
+  Trash2,
+  Clock,
+  Lock,
+  MapPin,
+  Sliders,
+  ArrowRight,
+  ArrowLeft,
   X,
   LogOut,
   Eye,
   EyeOff,
   AlertCircle,
-  Calendar
+  Calendar,
+  Radio
 } from 'lucide-react';
+
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+const TIME_ZONE = 'Asia/Beirut';
+
+// Set VITE_KIOSK_PIN in your .env file. This is a client-side deterrent only,
+// not real security (anyone can read the built bundle).
+const KIOSK_PIN = import.meta.env.VITE_KIOSK_PIN || '0000';
+
+const FLOOR_OPTIONS = ['LGF', '1st Floor', '2nd Floor'];
 
 const ROOM_METADATA = {
   'Phoenix': { floor: '1st Floor', floorCode: '1st', side: 'left' },
@@ -28,7 +40,65 @@ const ROOM_METADATA = {
   'Pavio Theatre': { floor: 'LGF', floorCode: 'LGF', side: 'left' },
 };
 
-const getTodayString = () => new Date().toISOString().split('T')[0];
+// ---------------------------------------------------------------------------
+// Date / time helpers (always Beirut local time, never UTC)
+// ---------------------------------------------------------------------------
+const beirutFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23'
+});
+
+const getBeirutNow = () => {
+  const p = Object.fromEntries(
+    beirutFormatter.formatToParts(new Date()).map((x) => [x.type, x.value])
+  );
+  return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
+};
+
+const getTodayString = () => getBeirutNow().date;
+
+const addDays = (dateStr, n) => {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+// Supabase "time" columns come back as HH:MM:SS; normalise to HH:MM so string
+// comparison against the clock is reliable.
+const toHHMM = (t) => (t ? String(t).slice(0, 5) : '');
+
+const crossesMidnight = (evt) => evt.endTime < evt.startTime;
+
+// Is the event showing at the given date + time? Handles events that run past midnight.
+const isEventActive = (evt, date, time) => {
+  if (!crossesMidnight(evt)) {
+    return evt.eventDate === date && time >= evt.startTime && time <= evt.endTime;
+  }
+  return (
+    (evt.eventDate === date && time >= evt.startTime) ||
+    (addDays(evt.eventDate, 1) === date && time <= evt.endTime)
+  );
+};
+
+const isEventPast = (evt, nowDate, nowTime) => {
+  const endDate = crossesMidnight(evt) ? addDays(evt.eventDate, 1) : evt.eventDate;
+  return endDate < nowDate || (endDate === nowDate && evt.endTime < nowTime);
+};
+
+const compareEvents = (a, b) =>
+  a.eventDate === b.eventDate
+    ? a.startTime.localeCompare(b.startTime)
+    : a.eventDate.localeCompare(b.eventDate);
+
+// ---------------------------------------------------------------------------
+// URL params (read once, so a physical display opens straight into player mode)
+// ---------------------------------------------------------------------------
+const readParams = () => new URLSearchParams(window.location.search);
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -42,22 +112,30 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // App Main State
-  const [activeTab, setActiveTab] = useState('cms');
-  const [selectedScreen, setSelectedScreen] = useState('gf_lobby');
-  const [movableFloorSetting, setMovableFloorSetting] = useState('2nd Floor');
-  
+  // ?mode=player hides the admin header entirely so a physical display shows only the signage.
+  const [kiosk] = useState(() => readParams().get('mode') === 'player');
+  const [activeTab, setActiveTab] = useState(() => (readParams().get('mode') === 'player' ? 'player' : 'cms'));
+  const [selectedScreen, setSelectedScreen] = useState(() => readParams().get('screen') || 'gf_lobby');
+  const [movableFloorSetting, setMovableFloorSetting] = useState(() => {
+    const f = readParams().get('floor');
+    return FLOOR_OPTIONS.includes(f) ? f : '2nd Floor';
+  });
+
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Live clock (Beirut time). Manual date/time is only used when "simulate" is on.
+  const [now, setNow] = useState(getBeirutNow);
+  const [simulate, setSimulate] = useState(false);
   const [simulatedTime, setSimulatedTime] = useState('11:00');
   const [simulatedDate, setSimulatedDate] = useState(getTodayString());
-  
+
   const [isTouchLocked, setIsTouchLocked] = useState(true);
-  const [tapCount, setTapCount] = useState(0);
+  const tapTimes = useRef([]);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
-  // Form state initialized with unselected room, times, targets, and date
   const [formData, setFormData] = useState({
     title: '',
     room: '',
@@ -68,6 +146,8 @@ export default function App() {
     headerOverride: ''
   });
 
+  // Auth session (supabase-js persists the session and auto-refreshes the token,
+  // so a display only needs to sign in once)
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -81,31 +161,56 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Tick the clock every 10 seconds; only re-render when the minute actually changes
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const modeParam = params.get('mode');
-    const screenParam = params.get('screen');
-
-    if (modeParam === 'player') setActiveTab('player');
-    if (screenParam) setSelectedScreen(screenParam);
+    const id = setInterval(() => {
+      const next = getBeirutNow();
+      setNow((prev) => (prev.date === next.date && prev.time === next.time ? prev : next));
+    }, 10000);
+    return () => clearInterval(id);
   }, []);
 
+  const fetchEvents = async () => {
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching events:', error);
+    } else if (data) {
+      const formatted = data.map((item) => ({
+        id: item.id,
+        title: item.title,
+        room: item.room,
+        floor: item.floor,
+        targets: item.targets || [],
+        eventDate: item.event_date || getTodayString(),
+        startTime: toHHMM(item.start_time),
+        endTime: toHHMM(item.end_time),
+        headerOverride: item.header_override || ''
+      }));
+      setEvents(formatted);
+    }
+    setLoading(false);
+  };
+
+  // Realtime sync, plus a 60s poll as a safety net in case a display's websocket drops
   useEffect(() => {
     if (!session) return;
     fetchEvents();
 
     const channel = supabase
       .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'events' },
-        () => {
-          fetchEvents();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+        fetchEvents();
+      })
       .subscribe();
 
+    const poll = setInterval(fetchEvents, 60000);
+
     return () => {
+      clearInterval(poll);
       supabase.removeChannel(channel);
     };
   }, [session]);
@@ -115,10 +220,7 @@ export default function App() {
     setLoginError('');
     setIsLoggingIn(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       setLoginError(error.message);
@@ -130,52 +232,43 @@ export default function App() {
     await supabase.auth.signOut();
   };
 
-  const fetchEvents = async () => {
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .order('created_at', { ascending: true });
-
-    if (!error && data) {
-      const formatted = data.map(item => ({
-        id: item.id,
-        title: item.title,
-        room: item.room,
-        floor: item.floor,
-        targets: item.targets || [],
-        eventDate: item.event_date || getTodayString(),
-        startTime: item.start_time,
-        endTime: item.end_time,
-        headerOverride: item.header_override || ''
-      }));
-      setEvents(formatted);
-    }
-    setLoading(false);
-  };
+  const effectiveDate = simulate ? simulatedDate : now.date;
+  const effectiveTime = simulate ? simulatedTime : now.time;
 
   const activeEventsForScreen = useMemo(() => {
-    return events.filter(evt => {
-      const isTargeted = evt.targets.includes(selectedScreen);
-      const isMatchingDate = evt.eventDate === simulatedDate;
-      const isWithinTime = simulatedTime >= evt.startTime && simulatedTime <= evt.endTime;
-      return isTargeted && isMatchingDate && isWithinTime;
-    }).slice(0, 4);
-  }, [events, selectedScreen, simulatedDate, simulatedTime]);
+    return events
+      .filter((evt) => {
+        if (!evt.targets.includes(selectedScreen)) return false;
+        // Floor signage only shows rooms on the floor the screen is installed on
+        if (selectedScreen === 'floor_movable' && evt.floor !== movableFloorSetting) return false;
+        return isEventActive(evt, effectiveDate, effectiveTime);
+      })
+      .sort(compareEvents)
+      .slice(0, 4);
+  }, [events, selectedScreen, movableFloorSetting, effectiveDate, effectiveTime]);
 
+  const { upcomingEvents, pastEvents } = useMemo(() => {
+    const sorted = [...events].sort(compareEvents);
+    return {
+      upcomingEvents: sorted.filter((e) => !isEventPast(e, now.date, now.time)),
+      pastEvents: sorted.filter((e) => isEventPast(e, now.date, now.time))
+    };
+  }, [events, now]);
+
+  // 5 taps on the top-right corner within 3 seconds opens the PIN modal
   const handleCornerTap = () => {
     if (!isTouchLocked) return;
-    const nextCount = tapCount + 1;
-    setTapCount(nextCount);
-    if (nextCount >= 5) {
+    const t = Date.now();
+    tapTimes.current = [...tapTimes.current.filter((x) => t - x < 3000), t];
+    if (tapTimes.current.length >= 5) {
+      tapTimes.current = [];
       setShowPinModal(true);
-      setTapCount(0);
     }
-    setTimeout(() => setTapCount(0), 3000);
   };
 
   const handlePinSubmit = (e) => {
     e.preventDefault();
-    if (pinInput === '0000') {
+    if (pinInput === KIOSK_PIN) {
       setIsTouchLocked(false);
       setShowPinModal(false);
       setPinInput('');
@@ -186,6 +279,15 @@ export default function App() {
     }
   };
 
+  const handleToggleSimulate = () => {
+    if (!simulate) {
+      // Start the simulation from the current real time
+      setSimulatedDate(now.date);
+      setSimulatedTime(now.time);
+    }
+    setSimulate(!simulate);
+  };
+
   const handleAddEvent = async (e) => {
     e.preventDefault();
     if (!formData.title || !formData.room || !formData.startTime || !formData.endTime || !formData.eventDate) {
@@ -193,11 +295,16 @@ export default function App() {
       return;
     }
 
+    if (formData.startTime === formData.endTime) {
+      alert('Start time and end time cannot be the same.');
+      return;
+    }
+
     if (formData.targets.length === 0) {
       alert('Please select at least one Target Display.');
       return;
     }
-    
+
     const roomMeta = ROOM_METADATA[formData.room] || { floor: '1st Floor' };
     const newId = `evt-${Date.now()}`;
 
@@ -236,6 +343,19 @@ export default function App() {
     const { error } = await supabase.from('events').delete().eq('id', id);
     if (error) {
       console.error('Error deleting event:', error);
+    }
+  };
+
+  const handleClearPast = async () => {
+    if (pastEvents.length === 0) return;
+    if (!window.confirm(`Delete ${pastEvents.length} past event(s)? This cannot be undone.`)) return;
+    const { error } = await supabase
+      .from('events')
+      .delete()
+      .in('id', pastEvents.map((e) => e.id));
+    if (error) {
+      console.error('Error clearing past events:', error);
+      alert('Failed to clear past events');
     }
   };
 
@@ -328,128 +448,148 @@ export default function App() {
 
   return (
     <div className={`min-h-screen w-full bg-slate-950 text-slate-100 font-sans flex flex-col ${activeTab === 'player' ? 'h-screen overflow-hidden' : ''}`}>
-      {/* Header Bar */}
-      <header className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex flex-col md:flex-row items-center justify-between gap-2 z-50 shrink-0 sticky top-0">
-        <div className="flex items-center justify-between w-full md:w-auto">
-          <div className="flex items-center space-x-3">
-            <div className="bg-amber-500 text-slate-950 px-2 py-0.5 rounded font-serif font-bold text-sm tracking-wider">
-              voco
+      {/* Header Bar (hidden on physical displays opened with ?mode=player) */}
+      {!kiosk && (
+        <header className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex flex-col md:flex-row items-center justify-between gap-2 z-50 shrink-0 sticky top-0">
+          <div className="flex items-center justify-between w-full md:w-auto">
+            <div className="flex items-center space-x-3">
+              <div className="bg-amber-500 text-slate-950 px-2 py-0.5 rounded font-serif font-bold text-sm tracking-wider">
+                voco
+              </div>
+              <div>
+                <h1 className="font-semibold text-xs md:text-sm text-slate-200">Signage System Controller</h1>
+                <p className="text-[10px] text-slate-400">Beirut Central District</p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-semibold text-xs md:text-sm text-slate-200">Signage System Controller</h1>
-              <p className="text-[10px] text-slate-400">Beirut Central District</p>
+
+            <div className="flex md:hidden items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+              <button
+                onClick={() => setActiveTab('cms')}
+                className={`px-2 py-1 rounded text-[10px] font-medium transition ${
+                  activeTab === 'cms' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'
+                }`}
+              >
+                CMS
+              </button>
+              <button
+                onClick={() => setActiveTab('player')}
+                className={`px-2 py-1 rounded text-[10px] font-medium transition ${
+                  activeTab === 'player' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'
+                }`}
+              >
+                Player
+              </button>
             </div>
           </div>
 
-          <div className="flex md:hidden items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+          <div className="hidden md:flex items-center space-x-2 bg-slate-950 p-1 rounded-lg border border-slate-800">
             <button
               onClick={() => setActiveTab('cms')}
-              className={`px-2 py-1 rounded text-[10px] font-medium transition ${
-                activeTab === 'cms' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'
+              className={`flex items-center space-x-2 px-3 py-1 rounded-md text-xs font-medium transition ${
+                activeTab === 'cms' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              CMS
+              <Sliders className="w-3.5 h-3.5" />
+              <span>Staff CMS Admin</span>
             </button>
             <button
               onClick={() => setActiveTab('player')}
-              className={`px-2 py-1 rounded text-[10px] font-medium transition ${
-                activeTab === 'player' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'
+              className={`flex items-center space-x-2 px-3 py-1 rounded-md text-xs font-medium transition ${
+                activeTab === 'player' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Player
+              <Monitor className="w-3.5 h-3.5" />
+              <span>Signage Player Display</span>
             </button>
           </div>
-        </div>
 
-        <div className="hidden md:flex items-center space-x-2 bg-slate-950 p-1 rounded-lg border border-slate-800">
-          <button
-            onClick={() => setActiveTab('cms')}
-            className={`flex items-center space-x-2 px-3 py-1 rounded-md text-xs font-medium transition ${
-              activeTab === 'cms' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span>Staff CMS Admin</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('player')}
-            className={`flex items-center space-x-2 px-3 py-1 rounded-md text-xs font-medium transition ${
-              activeTab === 'player' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Monitor className="w-3.5 h-3.5" />
-            <span>Signage Player Display</span>
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          {activeTab === 'player' && (
-            <>
-              <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
-                <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="text-slate-400 text-[11px]">Date:</span>
-                <input
-                  type="date"
-                  value={simulatedDate}
-                  onChange={(e) => setSimulatedDate(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
-                />
-              </div>
-
-              <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
-                <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="text-slate-400 text-[11px]">Time:</span>
-                <input
-                  type="time"
-                  value={simulatedTime}
-                  onChange={(e) => setSimulatedTime(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
-                />
-              </div>
-
-              <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
-                <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="text-slate-400 text-[11px]">Target:</span>
-                <select
-                  value={selectedScreen}
-                  onChange={(e) => setSelectedScreen(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 text-slate-200 text-xs px-1.5 py-0.5 rounded focus:outline-none"
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            {activeTab === 'player' && (
+              <>
+                <button
+                  onClick={handleToggleSimulate}
+                  title={simulate ? 'Simulating a custom date/time. Click to return to the live clock.' : 'Showing live Beirut time. Click to simulate a custom date/time.'}
+                  className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md border text-[11px] font-medium transition ${
+                    simulate
+                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                      : 'bg-emerald-400/10 border-emerald-400/30 text-emerald-400'
+                  }`}
                 >
-                  <option value="gf_lobby">GF Lobby Screen</option>
-                  <option value="lgf_lobby">LGF Lobby Screen</option>
-                  <option value="floor_movable">Floor Directional Signage</option>
-                </select>
-              </div>
+                  <Radio className="w-3.5 h-3.5" />
+                  <span>{simulate ? 'Simulating' : `Live ${now.time}`}</span>
+                </button>
 
-              {selectedScreen === 'floor_movable' && (
+                {simulate && (
+                  <>
+                    <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
+                      <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="text-slate-400 text-[11px]">Date:</span>
+                      <input
+                        type="date"
+                        value={simulatedDate}
+                        onChange={(e) => setSimulatedDate(e.target.value)}
+                        className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
+                      <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="text-slate-400 text-[11px]">Time:</span>
+                      <input
+                        type="time"
+                        value={simulatedTime}
+                        onChange={(e) => setSimulatedTime(e.target.value)}
+                        className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
+                      />
+                    </div>
+                  </>
+                )}
+
                 <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
-                  <span className="text-slate-400 text-[11px]">Floor:</span>
+                  <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="text-slate-400 text-[11px]">Target:</span>
                   <select
-                    value={movableFloorSetting}
-                    onChange={(e) => setMovableFloorSetting(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
+                    value={selectedScreen}
+                    onChange={(e) => setSelectedScreen(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 text-slate-200 text-xs px-1.5 py-0.5 rounded focus:outline-none"
                   >
-                    <option value="1st Floor">1st Floor</option>
-                    <option value="2nd Floor">2nd Floor</option>
+                    <option value="gf_lobby">GF Lobby Screen</option>
+                    <option value="lgf_lobby">LGF Lobby Screen</option>
+                    <option value="floor_movable">Floor Directional Signage</option>
                   </select>
                 </div>
-              )}
-            </>
-          )}
 
-          <button
-            onClick={handleSignOut}
-            className="flex items-center space-x-1 px-2.5 py-1 bg-slate-950 hover:bg-red-500/10 hover:text-red-400 text-slate-400 border border-slate-800 rounded-md text-xs transition ml-auto"
-            title="Sign Out"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Sign Out</span>
-          </button>
-        </div>
-      </header>
+                {selectedScreen === 'floor_movable' && (
+                  <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">
+                    <span className="text-slate-400 text-[11px]">Floor:</span>
+                    <select
+                      value={movableFloorSetting}
+                      onChange={(e) => setMovableFloorSetting(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
+                    >
+                      {FLOOR_OPTIONS.map((f) => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
+            )}
+
+            <button
+              onClick={handleSignOut}
+              className="flex items-center space-x-1 px-2.5 py-1 bg-slate-950 hover:bg-red-500/10 hover:text-red-400 text-slate-400 border border-slate-800 rounded-md text-xs transition ml-auto"
+              title="Sign Out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+          </div>
+        </header>
+      )}
 
       {/* Staff CMS View */}
-      {activeTab === 'cms' && (
+      {activeTab === 'cms' && !kiosk && (
         <div className="flex-1 p-4 md:p-6 max-w-5xl mx-auto w-full space-y-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -486,7 +626,7 @@ export default function App() {
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500 text-xs md:text-sm"
                   >
                     <option value="" disabled>Select a meeting room...</option>
-                    {Object.keys(ROOM_METADATA).map(room => (
+                    {Object.keys(ROOM_METADATA).map((room) => (
                       <option key={room} value={room}>{room} ({ROOM_METADATA[room].floor})</option>
                     ))}
                   </select>
@@ -510,7 +650,7 @@ export default function App() {
                   <input
                     type="date"
                     required
-                    min={getTodayString()}
+                    min={now.date}
                     value={formData.eventDate}
                     onChange={(e) => setFormData({ ...formData, eventDate: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500 text-xs md:text-sm"
@@ -537,6 +677,9 @@ export default function App() {
                     onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500 text-xs md:text-sm"
                   />
+                  {formData.startTime && formData.endTime && formData.endTime < formData.startTime && (
+                    <p className="text-[11px] text-amber-400/80 mt-1">Ends the next day, after midnight.</p>
+                  )}
                 </div>
               </div>
 
@@ -547,7 +690,7 @@ export default function App() {
                     { id: 'gf_lobby', label: 'GF Lobby Display' },
                     { id: 'lgf_lobby', label: 'LGF Lobby Display' },
                     { id: 'floor_movable', label: 'Floor Signage' },
-                  ].map(target => (
+                  ].map((target) => (
                     <label key={target.id} className="flex items-center space-x-2 cursor-pointer bg-slate-950 border border-slate-800 p-2.5 rounded-lg hover:border-slate-700 transition">
                       <input
                         type="checkbox"
@@ -556,7 +699,7 @@ export default function App() {
                           if (e.target.checked) {
                             setFormData({ ...formData, targets: [...formData.targets, target.id] });
                           } else {
-                            setFormData({ ...formData, targets: formData.targets.filter(t => t !== target.id) });
+                            setFormData({ ...formData, targets: formData.targets.filter((t) => t !== target.id) });
                           }
                         }}
                         className="rounded border-slate-800 text-amber-500 focus:ring-amber-500 bg-slate-950 w-4 h-4"
@@ -577,34 +720,43 @@ export default function App() {
             </form>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-3 shadow-xl mb-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-3 shadow-xl">
             <h3 className="font-semibold text-xs text-slate-400 uppercase tracking-wider">
-              Active Schedules ({events.length})
+              Active &amp; Upcoming Schedules ({upcomingEvents.length})
             </h3>
             {loading ? (
               <p className="text-xs text-slate-500">Syncing with database...</p>
-            ) : events.length === 0 ? (
-              <p className="text-xs text-slate-500 italic">No events currently scheduled in database.</p>
+            ) : upcomingEvents.length === 0 ? (
+              <p className="text-xs text-slate-500 italic">No active or upcoming events.</p>
             ) : (
               <div className="space-y-2">
-                {events.map((evt) => (
-                  <div
-                    key={evt.id}
-                    className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs md:text-sm"
-                  >
-                    <div>
-                      <div className="font-semibold text-slate-200">{evt.title}</div>
-                      <div className="text-amber-400/90 text-xs">
-                        <span className="text-slate-400 font-medium">{evt.eventDate}</span> • in <span className="font-medium text-slate-300">{evt.room}</span> • ({evt.startTime} - {evt.endTime})
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteEvent(evt.id)}
-                      className="text-slate-500 hover:text-red-400 p-1.5 transition rounded-lg hover:bg-slate-900"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                {upcomingEvents.map((evt) => (
+                  <EventRow key={evt.id} evt={evt} onDelete={handleDeleteEvent} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-3 shadow-xl mb-6">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-xs text-slate-400 uppercase tracking-wider">
+                Past Events ({pastEvents.length})
+              </h3>
+              {pastEvents.length > 0 && (
+                <button
+                  onClick={handleClearPast}
+                  className="text-xs text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-500/40 px-2.5 py-1 rounded-md transition"
+                >
+                  Clear past events
+                </button>
+              )}
+            </div>
+            {pastEvents.length === 0 ? (
+              <p className="text-xs text-slate-500 italic">Nothing here yet.</p>
+            ) : (
+              <div className="space-y-2 opacity-60">
+                {pastEvents.map((evt) => (
+                  <EventRow key={evt.id} evt={evt} onDelete={handleDeleteEvent} />
                 ))}
               </div>
             )}
@@ -643,13 +795,14 @@ export default function App() {
             <form onSubmit={handlePinSubmit} className="space-y-3">
               <input
                 type="password"
+                inputMode="numeric"
                 maxLength={4}
-                placeholder="PIN (Default 0000)"
+                placeholder="PIN"
                 value={pinInput}
                 onChange={(e) => setPinInput(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-center text-lg tracking-widest text-amber-400 focus:outline-none focus:border-amber-500"
               />
-              {pinError && <p className="text-[11px] text-red-400 text-center">Incorrect PIN. Try 0000.</p>}
+              {pinError && <p className="text-[11px] text-red-400 text-center">Incorrect PIN.</p>}
               <button
                 type="submit"
                 className="w-full bg-amber-500 text-slate-950 font-semibold py-2 rounded text-xs hover:bg-amber-400 transition"
@@ -660,6 +813,28 @@ export default function App() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function EventRow({ evt, onDelete }) {
+  return (
+    <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs md:text-sm">
+      <div>
+        <div className="font-semibold text-slate-200">{evt.title}</div>
+        <div className="text-amber-400/90 text-xs">
+          <span className="text-slate-400 font-medium">{evt.eventDate}</span> • in{' '}
+          <span className="font-medium text-slate-300">{evt.room}</span> • ({evt.startTime} - {evt.endTime}
+          {crossesMidnight(evt) ? ', next day' : ''})
+        </div>
+      </div>
+      <button
+        onClick={() => onDelete(evt.id)}
+        className="text-slate-500 hover:text-red-400 p-1.5 transition rounded-lg hover:bg-slate-900"
+        title="Delete event"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
     </div>
   );
 }
@@ -693,14 +868,15 @@ function SignageCanvas({
 
   if (eventCount === 0) {
     return (
-      <div 
+      <div
         className={`w-full h-full bg-slate-950 relative flex flex-col items-center justify-center p-6 overflow-hidden select-none ${
           isTouchLocked ? 'pointer-events-auto' : ''
         }`}
       >
         <div
           onClick={onCornerTap}
-          className="aria-hidden:true absolute top-0 right-0 w-24 h-24 z-50 cursor-default"
+          aria-hidden="true"
+          className="absolute top-0 right-0 w-24 h-24 z-50 cursor-default"
         />
 
         <div className="absolute inset-0 bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950 opacity-90" />
@@ -722,13 +898,14 @@ function SignageCanvas({
   }
 
   return (
-    <div 
+    <div
       className={`w-full h-full bg-[#070B19] text-white flex flex-col justify-between relative overflow-hidden select-none font-serif ${
         isTouchLocked ? 'pointer-events-none' : ''
       }`}
     >
       <div
         onClick={onCornerTap}
+        aria-hidden="true"
         className="pointer-events-auto absolute top-0 right-0 w-24 h-24 z-50 cursor-default"
       />
 
@@ -826,8 +1003,8 @@ function DynamicLobbyLayout({ screenType, events }) {
         const isFirstFloor = roomMeta.floorCode === '1st';
 
         return (
-          <div 
-            key={evt.id} 
+          <div
+            key={evt.id}
             className={`flex items-center justify-between space-x-3 md:space-x-4 bg-[#0A1022]/90 border border-amber-400/40 rounded-xl ${currentSize.cardPadding} shadow-xl transition-all duration-300`}
           >
             <div className={`bg-amber-400 text-slate-950 font-sans font-extrabold rounded-lg shadow shrink-0 ${currentSize.badgeText}`}>
@@ -863,8 +1040,8 @@ function DynamicLobbyLayout({ screenType, events }) {
 }
 
 function FloorAxisLayout({ movableFloorSetting, events }) {
-  const leftEvents = events.filter(e => (ROOM_METADATA[e.room]?.side || 'left') === 'left');
-  const rightEvents = events.filter(e => (ROOM_METADATA[e.room]?.side || 'left') === 'right');
+  const leftEvents = events.filter((e) => (ROOM_METADATA[e.room]?.side || 'left') === 'left');
+  const rightEvents = events.filter((e) => (ROOM_METADATA[e.room]?.side || 'left') === 'right');
 
   return (
     <div className="w-full max-w-5xl space-y-4 px-2">
@@ -886,7 +1063,7 @@ function FloorAxisLayout({ movableFloorSetting, events }) {
 
       <div className="grid grid-cols-2 gap-6 pt-1">
         <div className="space-y-3">
-          {leftEvents.map(evt => (
+          {leftEvents.map((evt) => (
             <div key={evt.id} className="flex items-center space-x-3 bg-[#0C142A] border border-amber-400/40 p-3 rounded-xl shadow-lg">
               <ArrowLeft className="w-6 h-6 text-amber-400 shrink-0" />
               <div className="min-w-0">
@@ -898,7 +1075,7 @@ function FloorAxisLayout({ movableFloorSetting, events }) {
         </div>
 
         <div className="space-y-3 text-right">
-          {rightEvents.map(evt => (
+          {rightEvents.map((evt) => (
             <div key={evt.id} className="flex items-center justify-end space-x-3 bg-[#0C142A] border border-amber-400/40 p-3 rounded-xl shadow-lg">
               <div className="min-w-0">
                 <div className="text-white font-serif text-sm md:text-xl font-bold truncate">{evt.title}</div>
