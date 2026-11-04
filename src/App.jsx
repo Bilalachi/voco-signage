@@ -10,7 +10,11 @@ import {
   Sliders, 
   ArrowRight, 
   ArrowLeft, 
-  X 
+  X,
+  LogOut,
+  Eye,
+  EyeOff,
+  AlertCircle
 } from 'lucide-react';
 
 const ROOM_METADATA = {
@@ -24,6 +28,17 @@ const ROOM_METADATA = {
 };
 
 export default function App() {
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Auth Form State
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // App Main State
   const [activeTab, setActiveTab] = useState('cms');
   const [selectedScreen, setSelectedScreen] = useState('gf_lobby');
   const [movableFloorSetting, setMovableFloorSetting] = useState('2nd Floor');
@@ -38,15 +53,28 @@ export default function App() {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
-  // Form state initialized with unselected meeting room, start time, and end time
+  // Form state with unselected room, times, and targets
   const [formData, setFormData] = useState({
     title: '',
     room: '',
-    targets: ['lgf_lobby', 'gf_lobby', 'floor_movable'],
+    targets: [],
     startTime: '',
     endTime: '',
     headerOverride: ''
   });
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -58,6 +86,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!session) return;
     fetchEvents();
 
     const channel = supabase
@@ -74,7 +103,27 @@ export default function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [session]);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setLoginError(error.message);
+    }
+    setIsLoggingIn(false);
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
 
   const fetchEvents = async () => {
     const { data, error } = await supabase
@@ -136,6 +185,11 @@ export default function App() {
       alert('Please select a meeting room, start time, and end time.');
       return;
     }
+
+    if (formData.targets.length === 0) {
+      alert('Please select at least one Target Display.');
+      return;
+    }
     
     const roomMeta = ROOM_METADATA[formData.room] || { floor: '1st Floor' };
     const newId = `evt-${Date.now()}`;
@@ -162,7 +216,7 @@ export default function App() {
     setFormData({
       title: '',
       room: '',
-      targets: ['lgf_lobby', 'gf_lobby', 'floor_movable'],
+      targets: [],
       startTime: '',
       endTime: '',
       headerOverride: ''
@@ -183,10 +237,90 @@ export default function App() {
     return "Today's Events";
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center text-slate-400 text-sm">
+        Checking authentication session...
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center p-4 font-sans select-none">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-2xl space-y-6">
+          <div className="text-center space-y-2">
+            <div className="inline-block bg-amber-500 text-slate-950 px-4 py-1.5 rounded-lg font-serif font-extrabold text-2xl tracking-widest shadow-lg">
+              voco
+            </div>
+            <h2 className="text-xl font-bold text-slate-100 tracking-wide">Signage CMS Login</h2>
+            <p className="text-xs text-slate-400">Beirut Central District Portal</p>
+          </div>
+
+          {loginError && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-center space-x-2 text-xs text-red-400">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{loginError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs text-slate-400 font-medium mb-1.5">Email Address</label>
+              <input
+                type="email"
+                required
+                placeholder="staff@voco.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-amber-500 transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 font-medium mb-1.5">Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-amber-500 transition pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3 rounded-xl transition text-sm shadow-lg flex items-center justify-center space-x-2"
+            >
+              <span>{isLoggingIn ? 'Authenticating...' : 'Sign In to Dashboard'}</span>
+            </button>
+          </form>
+
+          <div className="text-center border-t border-slate-800 pt-4">
+            <p className="text-[11px] text-slate-500">
+              User accounts are managed centrally by the Administrator via Supabase Auth.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-screen w-screen bg-slate-950 text-slate-100 font-sans flex flex-col overflow-hidden select-none">
+    <div className={`min-h-screen w-full bg-slate-950 text-slate-100 font-sans flex flex-col ${activeTab === 'player' ? 'h-screen overflow-hidden' : ''}`}>
       {/* Header Bar */}
-      <header className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex flex-col md:flex-row items-center justify-between gap-2 z-50 shrink-0">
+      <header className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex flex-col md:flex-row items-center justify-between gap-2 z-50 shrink-0 sticky top-0">
         <div className="flex items-center justify-between w-full md:w-auto">
           <div className="flex items-center space-x-3">
             <div className="bg-amber-500 text-slate-950 px-2 py-0.5 rounded font-serif font-bold text-sm tracking-wider">
@@ -278,12 +412,21 @@ export default function App() {
               </select>
             </div>
           )}
+
+          <button
+            onClick={handleSignOut}
+            className="flex items-center space-x-1 px-2.5 py-1 bg-slate-950 hover:bg-red-500/10 hover:text-red-400 text-slate-400 border border-slate-800 rounded-md text-xs transition ml-auto"
+            title="Sign Out"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Sign Out</span>
+          </button>
         </div>
       </header>
 
       {/* Staff CMS View */}
       {activeTab === 'cms' && (
-        <div className="flex-1 p-4 md:p-6 max-w-5xl mx-auto w-full space-y-4 overflow-y-auto">
+        <div className="flex-1 p-4 md:p-6 max-w-5xl mx-auto w-full space-y-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h2 className="font-semibold text-xs md:text-sm flex items-center space-x-2 text-slate-200">
@@ -398,7 +541,7 @@ export default function App() {
             </form>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-3 shadow-xl">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-3 shadow-xl mb-6">
             <h3 className="font-semibold text-xs text-slate-400 uppercase tracking-wider">
               Active Schedules ({events.length})
             </h3>
