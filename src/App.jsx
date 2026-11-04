@@ -273,192 +273,192 @@ const handleAddEvent = async (e) => {
         </div>
       </header>
 
-      {/* CMS ADMIN CONTROLLER TAB */}
-      {activeTab === 'cms' && (
-        <div className="flex-1 p-6 grid grid-cols-12 gap-6 overflow-y-auto">
-          {/* Left Panel: Event Form and Schedule List */}
-          <div className="col-span-5 space-y-6">
-            {/* Add Event Card */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h2 className="font-semibold text-sm flex items-center space-x-2 text-slate-200">
-                  <Plus className="w-4 h-4 text-amber-400" />
-                  <span>Schedule New Event</span>
-                </h2>
-                <span className="text-xs text-emerald-400/80 bg-emerald-400/10 px-2 py-0.5 rounded flex items-center space-x-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span>Supabase Live</span>
-                </span>
-              </div>
+{/* CMS ADMIN CONTROLLER TAB */}
+{activeTab === 'cms' && (
+  <div className="flex-1 p-4 md:p-6 flex flex-col lg:grid lg:grid-cols-12 gap-6 overflow-y-auto">
+    
+    {/* Left Panel: Event Form & Schedule List (Full width on mobile, 5 cols on desktop) */}
+    <div className="w-full lg:col-span-5 space-y-6">
+      
+      {/* Add Event Card */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h2 className="font-semibold text-sm flex items-center space-x-2 text-slate-200">
+            <Plus className="w-4 h-4 text-amber-400" />
+            <span>Schedule New Event</span>
+          </h2>
+          <span className="text-xs text-emerald-400/80 bg-emerald-400/10 px-2 py-0.5 rounded flex items-center space-x-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Supabase Live</span>
+          </span>
+        </div>
 
-              <form onSubmit={handleAddEvent} className="space-y-4 text-xs">
-                <div>
-                  <label className="block text-slate-400 mb-1">Event Name / Title</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Saccal Meeting, Unicef CPD..."
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-400 mb-1">Meeting Room</label>
-                    <select
-                      value={formData.room}
-                      onChange={(e) => setFormData({ ...formData, room: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
-                    >
-                      {Object.keys(ROOM_METADATA).map(room => (
-                        <option key={room} value={room}>{room} ({ROOM_METADATA[room].floor})</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-400 mb-1">Custom Header Override</label>
-                    <input
-                      type="text"
-                      placeholder="Optional title override"
-                      value={formData.headerOverride}
-                      onChange={(e) => setFormData({ ...formData, headerOverride: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-400 mb-1">Start Time</label>
-                    <input
-                      type="time"
-                      value={formData.startTime}
-                      onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-400 mb-1">End Time</label>
-                    <input
-                      type="time"
-                      value={formData.endTime}
-                      onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 mb-1">Target Displays</label>
-                  <div className="flex items-center space-x-4 pt-1">
-                    {[
-                      { id: 'gf_lobby', label: 'GF Lobby' },
-                      { id: 'lgf_lobby', label: 'LGF Lobby' },
-                      { id: 'floor_movable', label: 'Floor Signage' },
-                    ].map(target => (
-                      <label key={target.id} className="flex items-center space-x-1.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.targets.includes(target.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData({ ...formData, targets: [...formData.targets, target.id] });
-                            } else {
-                              setFormData({ ...formData, targets: formData.targets.filter(t => t !== target.id) });
-                            }
-                          }}
-                          className="rounded border-slate-800 text-amber-500 focus:ring-amber-500 bg-slate-950"
-                        />
-                        <span className="text-slate-300">{target.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-2 rounded transition flex items-center justify-center space-x-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Publish Schedule</span>
-                </button>
-              </form>
-            </div>
-
-            {/* Active Schedule List */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
-              <h3 className="font-semibold text-xs text-slate-400 uppercase tracking-wider">
-                Active Schedules ({events.length})
-              </h3>
-              {loading ? (
-                <p className="text-xs text-slate-500">Syncing with database...</p>
-              ) : events.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">No events scheduled in database.</p>
-              ) : (
-                <div className="space-y-2">
-                  {events.map((evt) => (
-                    <div
-                      key={evt.id}
-                      className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs"
-                    >
-                      <div>
-                        <div className="font-semibold text-slate-200">{evt.title}</div>
-                        <div className="text-amber-400/90 text-[11px]">
-                          in {evt.room} • ({evt.startTime} - {evt.endTime})
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteEvent(evt.id)}
-                        className="text-slate-500 hover:text-red-400 p-1 transition"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+        <form onSubmit={handleAddEvent} className="space-y-4 text-xs">
+          <div>
+            <label className="block text-slate-400 mb-1">Event Name / Title</label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Saccal Meeting, Unicef CPD..."
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
+            />
           </div>
 
-          {/* Right Panel: Live Canvas Simulator */}
-          <div className="col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-              <div className="flex items-center space-x-2">
-                <Eye className="w-4 h-4 text-amber-400" />
-                <h3 className="font-semibold text-sm text-slate-200">Live Hardware Canvas Emulator</h3>
-              </div>
-              <div className="flex items-center space-x-3 text-xs">
-                <button
-                  onClick={() => setForceVideoLoop(!forceVideoLoop)}
-                  className={`px-3 py-1 rounded border transition ${
-                    forceVideoLoop
-                      ? 'bg-red-500/20 border-red-500 text-red-300'
-                      : 'bg-slate-800 border-slate-700 text-slate-300'
-                  }`}
-                >
-                  {forceVideoLoop ? 'Override: Force Video Loop' : 'Normal Schedule Mode'}
-                </button>
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-slate-400 mb-1">Meeting Room</label>
+              <select
+                value={formData.room}
+                onChange={(e) => setFormData({ ...formData, room: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
+              >
+                {Object.keys(ROOM_METADATA).map(room => (
+                  <option key={room} value={room}>{room} ({ROOM_METADATA[room].floor})</option>
+                ))}
+              </select>
             </div>
 
-            {/* Display Canvas Container */}
-            <div className="flex-1 bg-black rounded-lg overflow-hidden border border-slate-800 relative flex items-center justify-center">
-              <SignageCanvas
-                selectedScreen={selectedScreen}
-                movableFloorSetting={movableFloorSetting}
-                activeEvents={activeEventsForScreen}
-                headerTitle={getHeaderTitle()}
-                isTouchLocked={isTouchLocked}
-                onCornerTap={handleCornerTap}
+            <div>
+              <label className="block text-slate-400 mb-1">Custom Header Override</label>
+              <input
+                type="text"
+                placeholder="Optional title override"
+                value={formData.headerOverride}
+                onChange={(e) => setFormData({ ...formData, headerOverride: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
               />
             </div>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-slate-400 mb-1">Start Time</label>
+              <input
+                type="time"
+                value={formData.startTime}
+                onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-400 mb-1">End Time</label>
+              <input
+                type="time"
+                value={formData.endTime}
+                onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-slate-400 mb-1">Target Displays</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+              {[
+                { id: 'gf_lobby', label: 'GF Lobby' },
+                { id: 'lgf_lobby', label: 'LGF Lobby' },
+                { id: 'floor_movable', label: 'Floor Signage' },
+              ].map(target => (
+                <label key={target.id} className="flex items-center space-x-2 cursor-pointer bg-slate-950 border border-slate-800 p-2 rounded">
+                  <input
+                    type="checkbox"
+                    checked={formData.targets.includes(target.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setFormData({ ...formData, targets: [...formData.targets, target.id] });
+                      } else {
+                        setFormData({ ...formData, targets: formData.targets.filter(t => t !== target.id) });
+                      }
+                    }}
+                    className="rounded border-slate-800 text-amber-500 focus:ring-amber-500 bg-slate-950"
+                  />
+                  <span className="text-slate-300 text-xs">{target.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-2.5 rounded transition flex items-center justify-center space-x-2 text-xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Publish Schedule</span>
+          </button>
+        </form>
+      </div>
+
+      {/* Active Schedule List */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-3">
+        <h3 className="font-semibold text-xs text-slate-400 uppercase tracking-wider">
+          Active Schedules ({events.length})
+        </h3>
+        {loading ? (
+          <p className="text-xs text-slate-500">Syncing with database...</p>
+        ) : events.length === 0 ? (
+          <p className="text-xs text-slate-500 italic">No events scheduled in database.</p>
+        ) : (
+          <div className="space-y-2">
+            {events.map((evt) => (
+              <div
+                key={evt.id}
+                className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs"
+              >
+                <div>
+                  <div className="font-semibold text-slate-200">{evt.title}</div>
+                  <div className="text-amber-400/90 text-[11px]">
+                    in {evt.room} • ({evt.startTime} - {evt.endTime})
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDeleteEvent(evt.id)}
+                  className="text-slate-500 hover:text-red-400 p-2 transition"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+
+    {/* Right Panel: Live Canvas Simulator (7 cols on desktop, responsive container on mobile) */}
+    <div className="w-full lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 flex flex-col min-h-[500px]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 mb-4 gap-2">
+        <div className="flex items-center space-x-2">
+          <Eye className="w-4 h-4 text-amber-400" />
+          <h3 className="font-semibold text-sm text-slate-200">Live Hardware Canvas Emulator</h3>
         </div>
-      )}
+        <button
+          onClick={() => setForceVideoLoop(!forceVideoLoop)}
+          className={`px-3 py-1.5 rounded border text-xs transition self-start sm:self-auto ${
+            forceVideoLoop
+              ? 'bg-red-500/20 border-red-500 text-red-300'
+              : 'bg-slate-800 border-slate-700 text-slate-300'
+          }`}
+        >
+          {forceVideoLoop ? 'Override: Force Video Loop' : 'Normal Schedule Mode'}
+        </button>
+      </div>
+
+      {/* Canvas Box with scaled aspect ratio for mobile view */}
+      <div className="flex-1 bg-black rounded-lg overflow-hidden border border-slate-800 relative flex items-center justify-center min-h-[400px] w-full">
+        <SignageCanvas
+          selectedScreen={selectedScreen}
+          movableFloorSetting={movableFloorSetting}
+          activeEvents={activeEventsForScreen}
+          headerTitle={getHeaderTitle()}
+          isTouchLocked={isTouchLocked}
+          onCornerTap={handleCornerTap}
+        />
+      </div>
+    </div>
+  </div>
+)}
 
       {/* FULLSCREEN PLAYER DISPLAY TAB */}
       {activeTab === 'player' && (
