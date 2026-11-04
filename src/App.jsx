@@ -2,28 +2,16 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import { 
   Monitor, 
-  Calendar, 
   Plus, 
   Trash2, 
   Clock, 
-  Layers, 
-  Settings, 
-  Play, 
   Lock, 
-  Unlock, 
-  ChevronRight, 
-  CheckCircle2,
-  RefreshCw,
-  Eye,
-  Sliders,
-  MapPin,
-  Building,
-  ArrowRight,
-  ArrowLeft,
-  X,
-  Volume2,
-  VolumeX,
-  Maximize2
+  MapPin, 
+  Sliders, 
+  Eye, 
+  ArrowRight, 
+  ArrowLeft, 
+  X 
 } from 'lucide-react';
 
 // Room Master Data & Floor / Orientation Mappings
@@ -65,6 +53,16 @@ export default function App() {
     headerOverride: ''
   });
 
+  // URL Query Params handling for physical displays
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const modeParam = params.get('mode');
+    const screenParam = params.get('screen');
+
+    if (modeParam === 'player') setActiveTab('player');
+    if (screenParam) setSelectedScreen(screenParam);
+  }, []);
+
   // Fetch initial events & subscribe to live Supabase updates
   useEffect(() => {
     fetchEvents();
@@ -92,7 +90,6 @@ export default function App() {
       .order('created_at', { ascending: true });
 
     if (!error && data) {
-      // Map DB snake_case to frontend camelCase
       const formatted = data.map(item => ({
         id: item.id,
         title: item.title,
@@ -144,14 +141,14 @@ export default function App() {
     }
   };
 
-const handleAddEvent = async (e) => {
+  const handleAddEvent = async (e) => {
     e.preventDefault();
     if (!formData.title) return;
     
     const roomMeta = ROOM_METADATA[formData.room] || { floor: '1st Floor' };
     const newId = `evt-${Date.now()}`;
 
-    const { data, error } = await supabase.from('events').insert([
+    const { error } = await supabase.from('events').insert([
       {
         id: newId,
         title: formData.title,
@@ -165,8 +162,8 @@ const handleAddEvent = async (e) => {
     ]);
 
     if (error) {
-      console.error('Supabase Error Details:', error);
-      alert(`Failed to add event: ${error.message} (${error.details || error.code})`);
+      console.error('Error inserting event:', error);
+      alert('Failed to add event to Supabase');
       return;
     }
 
@@ -187,7 +184,6 @@ const handleAddEvent = async (e) => {
     }
   };
 
-  // Header Title Logic
   const getHeaderTitle = () => {
     if (activeEventsForScreen.length === 0) return '';
     if (activeEventsForScreen[0].headerOverride) return activeEventsForScreen[0].headerOverride;
@@ -196,21 +192,43 @@ const handleAddEvent = async (e) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
-      {/* Top Global Mode Switcher Bar */}
-      <header className="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center justify-between z-50">
-        <div className="flex items-center space-x-3">
-          <div className="bg-amber-500 text-slate-950 px-2.5 py-1 rounded font-serif font-bold text-lg tracking-wider">
-            voco
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col w-full overflow-x-hidden">
+      {/* Top Global Mode Switcher Bar (Fully Responsive Wrap) */}
+      <header className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-3 z-50 w-full">
+        <div className="flex items-center justify-between w-full md:w-auto">
+          <div className="flex items-center space-x-3">
+            <div className="bg-amber-500 text-slate-950 px-2 py-0.5 rounded font-serif font-bold text-base tracking-wider">
+              voco
+            </div>
+            <div>
+              <h1 className="font-semibold text-xs md:text-sm text-slate-200">Signage System Controller</h1>
+              <p className="text-[10px] md:text-xs text-slate-400">Beirut Central District</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-semibold text-sm text-slate-200">Signage System Controller</h1>
-            <p className="text-xs text-slate-400">Beirut Central District</p>
+
+          {/* View Mode Toggle Buttons (Mobile Inline) */}
+          <div className="flex md:hidden items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+            <button
+              onClick={() => setActiveTab('cms')}
+              className={`px-2.5 py-1 rounded text-[10px] font-medium transition ${
+                activeTab === 'cms' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'
+              }`}
+            >
+              CMS
+            </button>
+            <button
+              onClick={() => setActiveTab('player')}
+              className={`px-2.5 py-1 rounded text-[10px] font-medium transition ${
+                activeTab === 'player' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'
+              }`}
+            >
+              Player
+            </button>
           </div>
         </div>
 
-        {/* View Mode Toggle Buttons */}
-        <div className="flex items-center space-x-2 bg-slate-950 p-1 rounded-lg border border-slate-800">
+        {/* View Mode Toggle Buttons (Desktop) */}
+        <div className="hidden md:flex items-center space-x-2 bg-slate-950 p-1 rounded-lg border border-slate-800">
           <button
             onClick={() => setActiveTab('cms')}
             className={`flex items-center space-x-2 px-4 py-1.5 rounded-md text-xs font-medium transition ${
@@ -231,25 +249,30 @@ const handleAddEvent = async (e) => {
           </button>
         </div>
 
-        {/* Hardware Simulator Controls */}
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2 text-xs bg-slate-950 px-3 py-1.5 rounded-md border border-slate-800">
-            <Clock className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-slate-400">Simulate Time:</span>
+        {/* Hardware Simulator Controls (Flexible Wrap Grid on Mobile) */}
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1.5 rounded-md border border-slate-800">
+            <div className="flex items-center space-x-1.5">
+              <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="text-slate-400 text-[11px]">Time:</span>
+            </div>
             <input
               type="time"
               value={simulatedTime}
               onChange={(e) => setSimulatedTime(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-2 py-0.5 rounded focus:outline-none"
+              className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
             />
           </div>
 
-          <div className="flex items-center space-x-2 text-xs bg-slate-950 px-3 py-1.5 rounded-md border border-slate-800">
-            <MapPin className="w-3.5 h-3.5 text-amber-400" />
+          <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1.5 rounded-md border border-slate-800">
+            <div className="flex items-center space-x-1.5">
+              <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="text-slate-400 text-[11px]">Screen:</span>
+            </div>
             <select
               value={selectedScreen}
               onChange={(e) => setSelectedScreen(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs px-2 py-0.5 rounded focus:outline-none"
+              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs px-1.5 py-0.5 rounded focus:outline-none max-w-[130px] sm:max-w-none"
             >
               <option value="gf_lobby">GF Lobby Screen</option>
               <option value="lgf_lobby">LGF Lobby Screen</option>
@@ -258,12 +281,12 @@ const handleAddEvent = async (e) => {
           </div>
 
           {selectedScreen === 'floor_movable' && (
-            <div className="flex items-center space-x-2 text-xs bg-slate-950 px-3 py-1.5 rounded-md border border-slate-800">
-              <span className="text-slate-400">Current Floor:</span>
+            <div className="flex-1 sm:flex-initial flex items-center justify-between space-x-1.5 text-xs bg-slate-950 px-2.5 py-1.5 rounded-md border border-slate-800">
+              <span className="text-slate-400 text-[11px]">Floor:</span>
               <select
                 value={movableFloorSetting}
                 onChange={(e) => setMovableFloorSetting(e.target.value)}
-                className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-2 py-0.5 rounded focus:outline-none"
+                className="bg-slate-900 border border-slate-700 text-amber-400 text-xs px-1.5 py-0.5 rounded focus:outline-none"
               >
                 <option value="1st Floor">1st Floor</option>
                 <option value="2nd Floor">2nd Floor</option>
@@ -273,196 +296,198 @@ const handleAddEvent = async (e) => {
         </div>
       </header>
 
-{/* CMS ADMIN CONTROLLER TAB */}
-{activeTab === 'cms' && (
-  <div className="flex-1 p-4 md:p-6 flex flex-col lg:grid lg:grid-cols-12 gap-6 overflow-y-auto">
-    
-    {/* Left Panel: Event Form & Schedule List (Full width on mobile, 5 cols on desktop) */}
-    <div className="w-full lg:col-span-5 space-y-6">
-      
-      {/* Add Event Card */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h2 className="font-semibold text-sm flex items-center space-x-2 text-slate-200">
-            <Plus className="w-4 h-4 text-amber-400" />
-            <span>Schedule New Event</span>
-          </h2>
-          <span className="text-xs text-emerald-400/80 bg-emerald-400/10 px-2 py-0.5 rounded flex items-center space-x-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Supabase Live</span>
-          </span>
-        </div>
+      {/* CMS ADMIN CONTROLLER TAB */}
+      {activeTab === 'cms' && (
+        <div className="flex-1 p-3 md:p-6 flex flex-col lg:grid lg:grid-cols-12 gap-6 overflow-y-auto w-full">
+          {/* Left Panel: Event Form and Schedule List */}
+          <div className="w-full lg:col-span-5 space-y-4 md:space-y-6">
+            {/* Add Event Card */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h2 className="font-semibold text-xs md:text-sm flex items-center space-x-2 text-slate-200">
+                  <Plus className="w-4 h-4 text-amber-400" />
+                  <span>Schedule New Event</span>
+                </h2>
+                <span className="text-[10px] md:text-xs text-emerald-400/80 bg-emerald-400/10 px-2 py-0.5 rounded flex items-center space-x-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Supabase Live</span>
+                </span>
+              </div>
 
-        <form onSubmit={handleAddEvent} className="space-y-4 text-xs">
-          <div>
-            <label className="block text-slate-400 mb-1">Event Name / Title</label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Saccal Meeting, Unicef CPD..."
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-slate-400 mb-1">Meeting Room</label>
-              <select
-                value={formData.room}
-                onChange={(e) => setFormData({ ...formData, room: e.target.value })}
-                className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
-              >
-                {Object.keys(ROOM_METADATA).map(room => (
-                  <option key={room} value={room}>{room} ({ROOM_METADATA[room].floor})</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-slate-400 mb-1">Custom Header Override</label>
-              <input
-                type="text"
-                placeholder="Optional title override"
-                value={formData.headerOverride}
-                onChange={(e) => setFormData({ ...formData, headerOverride: e.target.value })}
-                className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-slate-400 mb-1">Start Time</label>
-              <input
-                type="time"
-                value={formData.startTime}
-                onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-400 mb-1">End Time</label>
-              <input
-                type="time"
-                value={formData.endTime}
-                onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-slate-400 mb-1">Target Displays</label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-              {[
-                { id: 'gf_lobby', label: 'GF Lobby' },
-                { id: 'lgf_lobby', label: 'LGF Lobby' },
-                { id: 'floor_movable', label: 'Floor Signage' },
-              ].map(target => (
-                <label key={target.id} className="flex items-center space-x-2 cursor-pointer bg-slate-950 border border-slate-800 p-2 rounded">
-                  <input
-                    type="checkbox"
-                    checked={formData.targets.includes(target.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setFormData({ ...formData, targets: [...formData.targets, target.id] });
-                      } else {
-                        setFormData({ ...formData, targets: formData.targets.filter(t => t !== target.id) });
-                      }
-                    }}
-                    className="rounded border-slate-800 text-amber-500 focus:ring-amber-500 bg-slate-950"
-                  />
-                  <span className="text-slate-300 text-xs">{target.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-2.5 rounded transition flex items-center justify-center space-x-2 text-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Publish Schedule</span>
-          </button>
-        </form>
-      </div>
-
-      {/* Active Schedule List */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-3">
-        <h3 className="font-semibold text-xs text-slate-400 uppercase tracking-wider">
-          Active Schedules ({events.length})
-        </h3>
-        {loading ? (
-          <p className="text-xs text-slate-500">Syncing with database...</p>
-        ) : events.length === 0 ? (
-          <p className="text-xs text-slate-500 italic">No events scheduled in database.</p>
-        ) : (
-          <div className="space-y-2">
-            {events.map((evt) => (
-              <div
-                key={evt.id}
-                className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs"
-              >
+              <form onSubmit={handleAddEvent} className="space-y-3 md:space-y-4 text-xs">
                 <div>
-                  <div className="font-semibold text-slate-200">{evt.title}</div>
-                  <div className="text-amber-400/90 text-[11px]">
-                    in {evt.room} • ({evt.startTime} - {evt.endTime})
+                  <label className="block text-slate-400 mb-1">Event Name / Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Saccal Meeting, Unicef CPD..."
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 mb-1">Meeting Room</label>
+                    <select
+                      value={formData.room}
+                      onChange={(e) => setFormData({ ...formData, room: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
+                    >
+                      {Object.keys(ROOM_METADATA).map(room => (
+                        <option key={room} value={room}>{room} ({ROOM_METADATA[room].floor})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 mb-1">Custom Header Override</label>
+                    <input
+                      type="text"
+                      placeholder="Optional title override"
+                      value={formData.headerOverride}
+                      onChange={(e) => setFormData({ ...formData, headerOverride: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-500"
+                    />
                   </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 mb-1">Start Time</label>
+                    <input
+                      type="time"
+                      value={formData.startTime}
+                      onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 mb-1">End Time</label>
+                    <input
+                      type="time"
+                      value={formData.endTime}
+                      onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-amber-400 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Target Displays</label>
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    {[
+                      { id: 'gf_lobby', label: 'GF Lobby' },
+                      { id: 'lgf_lobby', label: 'LGF Lobby' },
+                      { id: 'floor_movable', label: 'Floor' },
+                    ].map(target => (
+                      <label key={target.id} className="flex items-center space-x-1.5 cursor-pointer bg-slate-950 border border-slate-800 p-2 rounded text-[11px]">
+                        <input
+                          type="checkbox"
+                          checked={formData.targets.includes(target.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, targets: [...formData.targets, target.id] });
+                            } else {
+                              setFormData({ ...formData, targets: formData.targets.filter(t => t !== target.id) });
+                            }
+                          }}
+                          className="rounded border-slate-800 text-amber-500 focus:ring-amber-500 bg-slate-950"
+                        />
+                        <span className="text-slate-300 truncate">{target.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 <button
-                  onClick={() => handleDeleteEvent(evt.id)}
-                  className="text-slate-500 hover:text-red-400 p-2 transition"
+                  type="submit"
+                  className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-2.5 rounded transition flex items-center justify-center space-x-2 text-xs"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Plus className="w-4 h-4" />
+                  <span>Publish Schedule</span>
                 </button>
-              </div>
-            ))}
+              </form>
+            </div>
+
+            {/* Active Schedule List */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 space-y-3">
+              <h3 className="font-semibold text-xs text-slate-400 uppercase tracking-wider">
+                Active Schedules ({events.length})
+              </h3>
+              {loading ? (
+                <p className="text-xs text-slate-500">Syncing with database...</p>
+              ) : events.length === 0 ? (
+                <p className="text-xs text-slate-500 italic">No events scheduled in database.</p>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {events.map((evt) => (
+                    <div
+                      key={evt.id}
+                      className="flex items-center justify-between p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs"
+                    >
+                      <div>
+                        <div className="font-semibold text-slate-200">{evt.title}</div>
+                        <div className="text-amber-400/90 text-[11px]">
+                          in {evt.room} • ({evt.startTime} - {evt.endTime})
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteEvent(evt.id)}
+                        className="text-slate-500 hover:text-red-400 p-1 transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </div>
-    </div>
 
-    {/* Right Panel: Live Canvas Simulator (7 cols on desktop, responsive container on mobile) */}
-    <div className="w-full lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-5 flex flex-col min-h-[500px]">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 mb-4 gap-2">
-        <div className="flex items-center space-x-2">
-          <Eye className="w-4 h-4 text-amber-400" />
-          <h3 className="font-semibold text-sm text-slate-200">Live Hardware Canvas Emulator</h3>
+          {/* Right Panel: Live Canvas Simulator (Auto-scaling aspect ratio on mobile) */}
+          <div className="w-full lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-3 md:p-5 flex flex-col items-center">
+            <div className="w-full flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+              <div className="flex items-center space-x-2">
+                <Eye className="w-4 h-4 text-amber-400" />
+                <h3 className="font-semibold text-xs md:text-sm text-slate-200">Live Hardware Canvas Emulator</h3>
+              </div>
+              <button
+                onClick={() => setForceVideoLoop(!forceVideoLoop)}
+                className={`px-2.5 py-1 rounded border text-[11px] transition ${
+                  forceVideoLoop
+                    ? 'bg-red-500/20 border-red-500 text-red-300'
+                    : 'bg-slate-800 border-slate-700 text-slate-300'
+                }`}
+              >
+                {forceVideoLoop ? 'Force Promo' : 'Schedule Mode'}
+              </button>
+            </div>
+
+            {/* Scaled Responsive Display Box */}
+            <div className="w-full flex justify-center items-center py-2 overflow-hidden">
+              <div className={`w-full max-w-sm md:max-w-md ${
+                selectedScreen === 'floor_movable' ? 'aspect-[16/9]' : 'aspect-[9/16]'
+              } bg-black rounded-lg overflow-hidden border-2 border-slate-800 relative shadow-2xl flex items-center justify-center max-h-[65vh]`}>
+                <SignageCanvas
+                  selectedScreen={selectedScreen}
+                  movableFloorSetting={movableFloorSetting}
+                  activeEvents={activeEventsForScreen}
+                  headerTitle={getHeaderTitle()}
+                  isTouchLocked={isTouchLocked}
+                  onCornerTap={handleCornerTap}
+                />
+              </div>
+            </div>
+          </div>
         </div>
-        <button
-          onClick={() => setForceVideoLoop(!forceVideoLoop)}
-          className={`px-3 py-1.5 rounded border text-xs transition self-start sm:self-auto ${
-            forceVideoLoop
-              ? 'bg-red-500/20 border-red-500 text-red-300'
-              : 'bg-slate-800 border-slate-700 text-slate-300'
-          }`}
-        >
-          {forceVideoLoop ? 'Override: Force Video Loop' : 'Normal Schedule Mode'}
-        </button>
-      </div>
-
-      {/* Canvas Box with scaled aspect ratio for mobile view */}
-      <div className="flex-1 bg-black rounded-lg overflow-hidden border border-slate-800 relative flex items-center justify-center min-h-[400px] w-full">
-        <SignageCanvas
-          selectedScreen={selectedScreen}
-          movableFloorSetting={movableFloorSetting}
-          activeEvents={activeEventsForScreen}
-          headerTitle={getHeaderTitle()}
-          isTouchLocked={isTouchLocked}
-          onCornerTap={handleCornerTap}
-        />
-      </div>
-    </div>
-  </div>
-)}
+      )}
 
       {/* FULLSCREEN PLAYER DISPLAY TAB */}
       {activeTab === 'player' && (
-        <div className="flex-1 bg-black relative overflow-hidden flex flex-col">
+        <div className="flex-1 bg-black relative overflow-hidden flex flex-col w-full h-full">
           <SignageCanvas
             selectedScreen={selectedScreen}
             movableFloorSetting={movableFloorSetting}
@@ -476,8 +501,8 @@ const handleAddEvent = async (e) => {
 
       {/* Security PIN Override Modal */}
       {showPinModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center">
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl w-80 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl w-full max-w-xs space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <h3 className="text-sm font-semibold text-slate-200 flex items-center space-x-2">
                 <Lock className="w-4 h-4 text-amber-400" />
@@ -524,26 +549,26 @@ function SignageCanvas({
   if (activeEvents.length === 0) {
     return (
       <div 
-        className={`w-full h-full bg-slate-950 relative flex flex-col items-center justify-center ${
+        className={`w-full h-full bg-slate-950 relative flex flex-col items-center justify-center p-4 ${
           isTouchLocked ? 'pointer-events-auto' : ''
         }`}
       >
         <div
           onClick={onCornerTap}
-          className="aria-hidden:true absolute top-0 right-0 w-24 h-24 z-50 cursor-default"
+          className="aria-hidden:true absolute top-0 right-0 w-16 h-16 sm:w-24 sm:h-24 z-50 cursor-default"
         />
 
         <div className="absolute inset-0 bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950 opacity-90" />
-        <div className="relative z-10 text-center space-y-4">
-          <div className="inline-block bg-amber-400/10 border border-amber-400/30 text-amber-400 font-serif text-3xl px-6 py-2 rounded-lg tracking-widest">
+        <div className="relative z-10 text-center space-y-3">
+          <div className="inline-block bg-amber-400/10 border border-amber-400/30 text-amber-400 font-serif text-2xl md:text-3xl px-5 py-1.5 rounded-lg tracking-widest">
             voco
           </div>
-          <h2 className="text-xl font-serif text-slate-300 tracking-wide">Beirut Central District</h2>
-          <p className="text-xs text-slate-500 animate-pulse">Playing Hotel Promo Video Loop...</p>
+          <h2 className="text-base md:text-xl font-serif text-slate-300 tracking-wide">Beirut Central District</h2>
+          <p className="text-[10px] md:text-xs text-slate-500 animate-pulse">Playing Hotel Promo Video Loop...</p>
         </div>
 
-        <div className="absolute bottom-6 left-0 right-0 flex items-center justify-center">
-          <div className="text-center font-serif text-xs text-slate-400 tracking-widest border-t border-slate-800/80 pt-2 px-8">
+        <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center">
+          <div className="text-center font-serif text-[10px] md:text-xs text-slate-400 tracking-widest border-t border-slate-800/80 pt-2 px-6">
             <span className="text-amber-400 font-bold">VOCO</span> BEIRUT CENTRAL DISTRICT
           </div>
         </div>
@@ -553,27 +578,27 @@ function SignageCanvas({
 
   return (
     <div 
-      className={`w-full h-full bg-[#070B19] text-white flex flex-col justify-between p-8 relative overflow-hidden select-none font-serif ${
+      className={`w-full h-full bg-[#070B19] text-white flex flex-col justify-between p-4 md:p-8 relative overflow-hidden select-none font-serif ${
         isTouchLocked ? 'pointer-events-none' : ''
       }`}
     >
       <div
         onClick={onCornerTap}
-        className="pointer-events-auto absolute top-0 right-0 w-24 h-24 z-50 cursor-default"
+        className="pointer-events-auto absolute top-0 right-0 w-16 h-16 sm:w-24 sm:h-24 z-50 cursor-default"
       />
 
-      <div className="text-center space-y-1 pt-2 z-10">
-        <div className="flex items-center justify-center space-x-3 text-amber-400/90 text-xs tracking-widest uppercase font-sans">
-          <span className="h-[1px] w-12 bg-amber-400/40" />
+      <div className="text-center space-y-1 pt-1 z-10">
+        <div className="flex items-center justify-center space-x-2 text-amber-400/90 text-[10px] md:text-xs tracking-widest uppercase font-sans">
+          <span className="h-[1px] w-8 md:w-12 bg-amber-400/40" />
           <span>How To Get To</span>
-          <span className="h-[1px] w-12 bg-amber-400/40" />
+          <span className="h-[1px] w-8 md:w-12 bg-amber-400/40" />
         </div>
-        <h1 className="text-4xl md:text-5xl font-bold text-white tracking-wide pt-1">
+        <h1 className="text-xl md:text-4xl font-bold text-white tracking-wide pt-0.5 line-clamp-2">
           {headerTitle}
         </h1>
       </div>
 
-      <div className="flex-1 flex items-center justify-center my-4 z-10">
+      <div className="flex-1 flex items-center justify-center my-2 z-10 overflow-y-auto">
         {selectedScreen === 'floor_movable' ? (
           <FloorAxisLayout movableFloorSetting={movableFloorSetting} events={activeEvents} />
         ) : (
@@ -581,9 +606,9 @@ function SignageCanvas({
         )}
       </div>
 
-      <div className="text-center z-10 border-t border-amber-400/20 pt-3 pb-1">
-        <div className="inline-flex items-center space-x-2 text-xs text-slate-300 tracking-widest font-sans">
-          <span className="font-serif font-bold text-amber-400 text-sm">voco</span>
+      <div className="text-center z-10 border-t border-amber-400/20 pt-2 pb-0.5">
+        <div className="inline-flex items-center space-x-2 text-[10px] md:text-xs text-slate-300 tracking-widest font-sans">
+          <span className="font-serif font-bold text-amber-400 text-xs md:text-sm">voco</span>
           <span className="text-slate-400">|</span>
           <span>Beirut Central District</span>
         </div>
@@ -596,53 +621,52 @@ function LobbyVerticalLayout({ screenType, events }) {
   const originBadge = screenType === 'lgf_lobby' ? 'LGF' : 'GF';
 
   return (
-    <div className="w-full max-w-4xl space-y-4">
+    <div className="w-full max-w-4xl space-y-2 md:space-y-4">
       {events.map((evt) => {
         const roomMeta = ROOM_METADATA[evt.room] || { floorCode: '1st' };
         const isFirstFloor = roomMeta.floorCode === '1st';
 
         return (
-          <div key={evt.id} className="flex items-center justify-between space-x-6">
-            <div className="bg-amber-400 text-slate-950 font-sans font-extrabold text-xl px-5 py-2 rounded-xl shadow-lg">
+          <div key={evt.id} className="flex items-center justify-between space-x-2 md:space-x-6">
+            <div className="bg-amber-400 text-slate-950 font-sans font-extrabold text-sm md:text-xl px-3 md:px-5 py-1.5 md:py-2 rounded-lg md:rounded-xl shadow-lg shrink-0">
               {originBadge}
             </div>
 
-            <div className="flex-1 flex items-center space-x-3 text-amber-400 font-sans text-xs">
+            <div className="flex-1 flex items-center space-x-1 md:space-x-3 text-amber-400 font-sans text-[10px] md:text-xs min-w-0">
               {isFirstFloor ? (
-                <div className="flex items-center space-x-3 w-full">
-                  <div className="flex flex-col items-center space-y-1">
-                    <div className="border border-amber-400/60 rounded p-1">
-                      <div className="text-[10px] text-center font-mono">↑↓</div>
+                <div className="flex items-center space-x-1.5 md:space-x-3 w-full">
+                  <div className="flex flex-col items-center space-y-0.5 shrink-0">
+                    <div className="border border-amber-400/60 rounded p-0.5">
+                      <div className="text-[9px] text-center font-mono">↑↓</div>
                     </div>
-                    <div className="text-[9px] text-amber-400">Stairs</div>
                   </div>
-                  <div className="h-8 w-[2px] bg-amber-400/40" />
-                  <div className="flex-1 border-t border-amber-400/40 flex items-center justify-between text-[11px] tracking-wider px-2">
-                    <span>ELEVATOR & STAIRS TO</span>
-                    <ArrowRight className="w-4 h-4 text-amber-400" />
+                  <div className="h-6 w-[1px] bg-amber-400/40 shrink-0" />
+                  <div className="flex-1 border-t border-amber-400/40 flex items-center justify-between text-[9px] md:text-[11px] tracking-wider px-1 truncate">
+                    <span className="truncate">ELEVATOR & STAIRS</span>
+                    <ArrowRight className="w-3 h-3 md:w-4 md:h-4 text-amber-400 shrink-0 ml-1" />
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center space-x-3 w-full">
-                  <div className="border border-amber-400/60 rounded p-1">
-                    <div className="text-[10px] text-center font-mono">↑↓</div>
+                <div className="flex items-center space-x-1.5 md:space-x-3 w-full">
+                  <div className="border border-amber-400/60 rounded p-0.5 shrink-0">
+                    <div className="text-[9px] text-center font-mono">↑↓</div>
                   </div>
-                  <div className="flex-1 border-t border-amber-400/40 flex items-center justify-between text-[11px] tracking-wider px-2">
-                    <span>ELEVATOR TO</span>
-                    <ArrowRight className="w-4 h-4 text-amber-400" />
+                  <div className="flex-1 border-t border-amber-400/40 flex items-center justify-between text-[9px] md:text-[11px] tracking-wider px-1 truncate">
+                    <span className="truncate">ELEVATOR TO</span>
+                    <ArrowRight className="w-3 h-3 md:w-4 md:h-4 text-amber-400 shrink-0 ml-1" />
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="w-72 bg-[#0C142A] border-2 border-amber-400/80 rounded-2xl p-4 text-center shadow-xl space-y-1">
-              <div className="text-amber-400 font-serif text-lg font-bold">
+            <div className="w-36 md:w-72 bg-[#0C142A] border md:border-2 border-amber-400/80 rounded-xl md:rounded-2xl p-2 md:p-4 text-center shadow-xl space-y-0.5 shrink-0">
+              <div className="text-amber-400 font-serif text-xs md:text-lg font-bold">
                 {roomMeta.floorCode} Floor
               </div>
-              <div className="text-white font-serif text-base font-bold leading-tight">
+              <div className="text-white font-serif text-xs md:text-base font-bold leading-tight truncate">
                 {evt.title}
               </div>
-              <div className="text-amber-300/90 font-serif text-xs italic">
+              <div className="text-amber-300/90 font-serif text-[10px] md:text-xs italic truncate">
                 in {evt.room}
               </div>
             </div>
@@ -658,44 +682,44 @@ function FloorAxisLayout({ movableFloorSetting, events }) {
   const rightEvents = events.filter(e => (ROOM_METADATA[e.room]?.side || 'left') === 'right');
 
   return (
-    <div className="w-full max-w-5xl space-y-12">
-      <div className="relative flex items-center justify-between my-8">
+    <div className="w-full max-w-5xl space-y-4 md:space-y-12">
+      <div className="relative flex items-center justify-between my-2 md:my-8">
         <div className="absolute inset-x-0 top-1/2 h-[2px] bg-amber-400/80 -translate-y-1/2" />
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-amber-400 rounded-full" />
-        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-amber-400 rounded-full" />
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 md:w-3 md:h-3 bg-amber-400 rounded-full" />
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 md:w-3 md:h-3 bg-amber-400 rounded-full" />
 
-        <div className="relative z-10 mx-auto bg-[#070B19] px-6 text-center space-y-1">
-          <div className="text-amber-400 font-serif text-2xl font-bold">
+        <div className="relative z-10 mx-auto bg-[#070B19] px-4 text-center space-y-0.5">
+          <div className="text-amber-400 font-serif text-sm md:text-2xl font-bold">
             {movableFloorSetting}
           </div>
-          <div className="w-3 h-3 bg-amber-400 rounded-full mx-auto shadow-lg shadow-amber-400/50" />
-          <div className="text-slate-300 font-sans text-xs tracking-wider flex items-center justify-center space-x-1 pt-1">
+          <div className="w-2 h-2 md:w-3 md:h-3 bg-amber-400 rounded-full mx-auto shadow-lg shadow-amber-400/50" />
+          <div className="text-slate-300 font-sans text-[9px] md:text-xs tracking-wider flex items-center justify-center space-x-1 pt-0.5">
             <span>← You are here</span>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-12 pt-4">
-        <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4 md:gap-12 pt-1 md:pt-4">
+        <div className="space-y-2 md:space-y-4">
           {leftEvents.map(evt => (
-            <div key={evt.id} className="flex items-center space-x-3">
-              <ArrowLeft className="w-5 h-5 text-amber-400 shrink-0" />
-              <div>
-                <div className="text-white font-serif text-base font-bold">{evt.title}</div>
-                <div className="text-amber-400 font-serif text-xs italic">in {evt.room}</div>
+            <div key={evt.id} className="flex items-center space-x-2">
+              <ArrowLeft className="w-4 h-4 text-amber-400 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-white font-serif text-xs md:text-base font-bold truncate">{evt.title}</div>
+                <div className="text-amber-400 font-serif text-[10px] md:text-xs italic truncate">in {evt.room}</div>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="space-y-4 text-right">
+        <div className="space-y-2 md:space-y-4 text-right">
           {rightEvents.map(evt => (
-            <div key={evt.id} className="flex items-center justify-end space-x-3">
-              <div>
-                <div className="text-white font-serif text-base font-bold">{evt.title}</div>
-                <div className="text-amber-400 font-serif text-xs italic">in {evt.room}</div>
+            <div key={evt.id} className="flex items-center justify-end space-x-2">
+              <div className="min-w-0">
+                <div className="text-white font-serif text-xs md:text-base font-bold truncate">{evt.title}</div>
+                <div className="text-amber-400 font-serif text-[10px] md:text-xs italic truncate">in {evt.room}</div>
               </div>
-              <ArrowRight className="w-5 h-5 text-amber-400 shrink-0" />
+              <ArrowRight className="w-4 h-4 text-amber-400 shrink-0" />
             </div>
           ))}
         </div>
